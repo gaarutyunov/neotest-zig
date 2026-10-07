@@ -47,11 +47,11 @@ fn addNeotestBuildStep(b: *std.Build) void {
 /// Adds arguments to test run steps.
 /// For example `--neotest-results-path`.
 fn passArguments(b: *std.Build) void {
-    const build_args = b.args orelse return;
     const test_step = getTestStep(b);
     for (test_step.dependencies.items) |substep| {
         const test_step_run = substep.cast(std.Build.Step.Run) orelse continue;
-        test_step_run.addArgs(build_args);
+        test_step_run.stdio = .inherit;
+        test_step_run.addPassthruArgs();
     }
 }
 

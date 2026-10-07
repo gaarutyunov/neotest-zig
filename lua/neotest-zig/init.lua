@@ -24,7 +24,7 @@ local nio = require("nio")
 ---@type neotest.Adapter
 local M = {
     name = "neotest-zig",
-    version = "v1.1.0",
+    version = "v1.5.0",
     dap = {
         adapter = "",
     },

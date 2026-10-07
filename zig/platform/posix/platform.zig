@@ -1,11 +1,28 @@
 const std = @import("std");
 
-pub fn redirectStdErrToFile(absolute_file_path: []const u8) !std.fs.File {
-    const file = try std.fs.createFileAbsolute(absolute_file_path, .{});
-    try std.posix.dup2(file.handle, std.posix.STDERR_FILENO);
+var original_stderr: ?std.posix.fd_t = null;
+
+fn duplicateToStderr(source: std.posix.fd_t) !void {
+    try std.Io.Threaded.dup2(source, std.posix.STDERR_FILENO);
+}
+
+pub fn redirectStdErrToFile(io: std.Io, absolute_file_path: []const u8) !std.Io.File {
+    const file = try std.Io.Dir.createFileAbsolute(io, absolute_file_path, .{});
+    errdefer file.close(io);
+    if (original_stderr == null) {
+        const result = std.posix.system.dup(std.posix.STDERR_FILENO);
+        const err = std.posix.errno(result);
+        if (err != .SUCCESS) return std.posix.unexpectedErrno(err);
+        original_stderr = @intCast(result);
+    }
+    try duplicateToStderr(file.handle);
     return file;
 }
 
-pub fn restoreStdErr() !void {
-    try std.posix.dup2(std.posix.STDERR_FILENO, std.posix.STDERR_FILENO);
+pub fn restoreStdErr(io: std.Io) !void {
+    const saved = original_stderr orelse return;
+    try duplicateToStderr(saved);
+    original_stderr = null;
+    const file: std.Io.File = .{ .handle = saved, .flags = .{ .nonblocking = false } };
+    file.close(io);
 }
