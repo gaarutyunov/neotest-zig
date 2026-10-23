@@ -296,7 +296,9 @@ function M._build_spec_with_buildfile(args, build_file_path)
                 '--test-runner-logs-path', test_runner_logs_dir_path,
                 '--test-runner-log-level', '' .. log.get_log_level(),
             },
-            initCommands = { "command source ~/.lldbinit" },
+            -- lldb fails the launch if a sourced file is missing.
+            initCommands = vim.uv.fs_stat(vim.fs.normalize("~/.lldbinit"))
+                and { "command source ~/.lldbinit" } or nil,
         }
         if build_success then
             run_spec.strategy.program = choose_program
