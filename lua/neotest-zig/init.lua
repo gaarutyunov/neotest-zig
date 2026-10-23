@@ -267,7 +267,8 @@ function M._build_spec_with_buildfile(args, build_file_path)
         ' --neotest-input-path "' .. neotest_input_path .. '"' ..
         ' --neotest-results-path "' .. neotest_results_path .. '"' ..
         ' --test-runner-logs-path "' .. test_runner_logs_dir_path .. '"' ..
-        ' --test-runner-log-level "' .. log.get_log_level() .. '"'
+        ' --test-runner-log-level "' .. log.get_log_level() .. '"' ..
+        ' --neotest-isolate'
 
     local run_spec = {
         command = zig_test_command,
@@ -379,7 +380,8 @@ function M._build_spec_without_buildfile(args)
         ' --test-cmd "' .. '--test-runner-logs-path' .. '"' ..
         ' --test-cmd "' .. test_runner_logs_dir_path .. '"' ..
         ' --test-cmd "' .. '--test-runner-log-level' .. '"' ..
-        ' --test-cmd "' .. log.get_log_level() .. '"'
+        ' --test-cmd "' .. log.get_log_level() .. '"' ..
+        ' --test-cmd "--neotest-isolate"'
 
     local run_spec = {
         command = zig_test_command,
