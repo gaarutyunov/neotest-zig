@@ -74,6 +74,15 @@ fn getSymbol(
     return if (symbols.items.len == 0) .unknown else symbols.items[0];
 }
 
+/// Matches a test symbol name against the name neotest sends (`test.foo` or `decltest.foo`).
+/// Newer Zig versions prefix the symbol with its module, e.g. `_main.decltest.foo`.
+fn isSameTestName(symbol_name: []const u8, input_name: []const u8) bool {
+    if (std.mem.eql(u8, symbol_name, input_name)) return true;
+    return symbol_name.len > input_name.len and
+        std.mem.endsWith(u8, symbol_name, input_name) and
+        symbol_name[symbol_name.len - input_name.len - 1] == '.';
+}
+
 fn getTestInput(
     test_name: []const u8,
     source_path: []const u8,
@@ -82,13 +91,39 @@ fn getTestInput(
     log.debug("Got needle {s} -> {s}", .{ source_path, test_name });
     for (test_inputs) |test_input| {
         log.debug("Comparing to {s} -> {s}", .{ test_input.source_path, test_input.test_name });
-        if (std.mem.eql(u8, test_input.test_name, test_name) and
+        if (isSameTestName(test_name, test_input.test_name) and
             std.mem.eql(u8, test_input.source_path, source_path))
         {
             return test_input;
         }
     }
     return null;
+}
+
+/// Fallback for when debug info has no source location (e.g. a broken dSYM), so the
+/// test can only be matched by its symbol name. The symbol's namespace, like `main`
+/// in `_main.decltest.foo`, is compared against the source file name. If that does
+/// not decide it, the test matches only when a single input has that name.
+fn getTestInputWithoutLocation(test_name: []const u8, test_inputs: []TestInput) ?TestInput {
+    var only_match: ?TestInput = null;
+    var match_count: usize = 0;
+    for (test_inputs) |test_input| {
+        if (!isSameTestName(test_name, test_input.test_name)) continue;
+        match_count += 1;
+        only_match = test_input;
+
+        if (test_name.len == test_input.test_name.len) continue;
+        const namespace = test_name[0 .. test_name.len - test_input.test_name.len - 1];
+        const container = namespace[if (std.mem.lastIndexOfScalar(u8, namespace, '.')) |i| i + 1 else 0..];
+        const file_stem = std.fs.path.stem(test_input.source_path);
+        // Mach-O symbols carry a leading underscore.
+        if (std.mem.eql(u8, container, file_stem) or
+            (container.len > 0 and container[0] == '_' and std.mem.eql(u8, container[1..], file_stem)))
+        {
+            return test_input;
+        }
+    }
+    return if (match_count == 1) only_match else null;
 }
 
 fn getZigLogLevelFromVimLogLevel(vim_log_level: u8) std.log.Level {
@@ -199,9 +234,11 @@ pub fn main(init: std.process.Init) !void {
         std.hash.autoHashStrat(&hasher, test_name, .Deep);
 
         if (matched_tests.items.len == test_inputs.len) continue;
-        const location = symbol.source_location orelse continue;
-        const actual_source_path = source_path orelse location.file_name;
-        const input = getTestInput(test_name, actual_source_path, test_inputs) orelse continue;
+        const actual_source_path = source_path orelse if (symbol.source_location) |location| location.file_name else null;
+        const input = (if (actual_source_path) |path|
+            getTestInput(test_name, path, test_inputs)
+        else
+            getTestInputWithoutLocation(test_name, test_inputs)) orelse continue;
         try matched_tests.append(allocator, .{ .func = test_function.func, .input = input });
     }
     const results_file_prefix = try std.fmt.allocPrint(allocator, "{d}", .{hasher.final()});
