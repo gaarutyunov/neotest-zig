@@ -343,7 +343,7 @@ fn runIsolated(
         log.debug("Spawning test process starting at test {d}", .{start_index});
         var child = try std.process.spawn(io, .{ .argv = child_argv.items });
         const term = try child.wait(io);
-        if (term.success()) return;
+        if (term == .exited and term.exited == 0) return;
 
         const crashed_index = readProgress(io, allocator, progress_file_path) orelse return error.TestProcessFailed;
         if (crashed_index < start_index or crashed_index >= matched_tests.len) return error.TestProcessFailed;
